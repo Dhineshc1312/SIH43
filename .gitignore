@@ -28,3 +28,4 @@ next-env.d.ts
 
 venv/
 backend/venv/
+backend/firebase-service-account.json
