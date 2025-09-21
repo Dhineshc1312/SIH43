@@ -1,3 +1,5 @@
+import React from "react"
+
 import type { ReactNode } from "react"
 import { Sprout } from "lucide-react"
 
