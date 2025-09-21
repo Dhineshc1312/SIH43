@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Mail, Lock, Chrome, Loader2, AlertTriangle } from "lucide-react"
+import { SmartText } from "@/components/ui/smart-text"
+import { Mail, Lock, Chrome, Loader2, AlertTriangle, User } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -19,9 +20,10 @@ export function LoginForm() {
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const [isDemoLoading, setIsDemoLoading] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
-  const { firebaseConfigured } = useAuth()
+  const { firebaseConfigured, signIn } = useAuth()
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,13 +40,11 @@ export function LoginForm() {
     setIsLoading(true)
 
     try {
-      const { signInWithEmail } = await import("@/lib/auth")
-      await signInWithEmail(email, password)
+      await signIn(email, password)
       toast({
         title: "Welcome back!",
         description: "You've been successfully signed in.",
       })
-      router.push('/dashboard')  // Redirect added here
     } catch (error: any) {
       toast({
         title: "Sign in failed",
@@ -55,34 +55,36 @@ export function LoginForm() {
     }
   }
 
-  const handleGoogleLogin = async () => {
-    if (!firebaseConfigured) {
-      toast({
-        title: "Configuration Required",
-        description: "Firebase authentication is not configured. Please check your environment variables.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsGoogleLoading(true)
+  const handleDemoLogin = async () => {
+    setIsDemoLoading(true)
 
     try {
-      const { signInWithGoogle } = await import("@/lib/auth")
-      await signInWithGoogle()
+      // Simulate demo login by bypassing Firebase and going directly to dashboard
       toast({
-        title: "Welcome back!",
-        description: "You've been successfully signed in with Google.",
+        title: "Demo Mode",
+        description: "Signed in as demo user. Some features may be limited.",
       })
-      router.push('/dashboard')  // Redirect added here
-    } catch (error: any) {
+
+      // Add a small delay to simulate authentication
+      setTimeout(() => {
+        router.push("/dashboard")
+      }, 1000)
+    } catch (error) {
       toast({
-        title: "Google sign in failed",
-        description: error.message,
+        title: "Demo login failed",
+        description: "Unable to access demo mode.",
         variant: "destructive",
       })
-      setIsGoogleLoading(false)
+      setIsDemoLoading(false)
     }
+  }
+
+  const handleGoogleLogin = async () => {
+    toast({
+      title: "Coming Soon",
+      description: "Google sign in will be available soon. Please use email/password for now.",
+      variant: "default",
+    })
   }
 
   if (!firebaseConfigured) {
@@ -91,17 +93,29 @@ export function LoginForm() {
         <Alert className="border-destructive/20 bg-destructive/5">
           <AlertTriangle className="h-4 w-4 text-destructive" />
           <AlertDescription className="text-destructive">
-            <strong>Firebase Configuration Required</strong>
+            <SmartText as="strong">Firebase Configuration Required</SmartText>
             <br />
-            Authentication is currently disabled because Firebase environment variables are not configured.
+            <SmartText>
+              Authentication is currently disabled because Firebase environment variables are not configured.
+            </SmartText>
             <br />
-            <span className="text-sm">Please set up your Firebase project in Project Settings.</span>
+            <SmartText className="text-sm">Please set up your Firebase project in Project Settings.</SmartText>
           </AlertDescription>
         </Alert>
 
+        <Button
+          onClick={handleDemoLogin}
+          disabled={isDemoLoading}
+          className="w-full h-12 text-base font-medium bg-transparent"
+          variant="outline"
+        >
+          {isDemoLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <User className="w-5 h-5 mr-2" />}
+          <SmartText>Try Demo Mode</SmartText>
+        </Button>
+
         <div className="text-center">
           <Link href="/" className="text-primary hover:underline">
-            ← Back to Home
+            <SmartText>← Back to Home</SmartText>
           </Link>
         </div>
       </div>
@@ -111,13 +125,13 @@ export function LoginForm() {
   return (
     <div className="space-y-6">
       <Button
-        onClick={handleGoogleLogin}
-        disabled={isGoogleLoading}
-        variant="outline"
-        className="w-full h-12 text-base bg-transparent"
+        onClick={handleDemoLogin}
+        disabled={isDemoLoading}
+        variant="secondary"
+        className="w-full h-12 text-base bg-muted hover:bg-muted/80"
       >
-        {isGoogleLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Chrome className="w-5 h-5 mr-2" />}
-        Continue with Google
+        {isDemoLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <User className="w-5 h-5 mr-2" />}
+        <SmartText>Try Demo Mode</SmartText>
       </Button>
 
       <div className="relative">
@@ -125,13 +139,38 @@ export function LoginForm() {
           <Separator className="w-full" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-card px-2 text-muted-foreground">Or continue with email</span>
+          <span className="bg-card px-2 text-muted-foreground">
+            <SmartText>Or sign in with account</SmartText>
+          </span>
+        </div>
+      </div>
+
+      <Button
+        onClick={handleGoogleLogin}
+        disabled={isGoogleLoading}
+        variant="outline"
+        className="w-full h-12 text-base bg-transparent"
+      >
+        {isGoogleLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Chrome className="w-5 h-5 mr-2" />}
+        <SmartText>Continue with Google</SmartText>
+      </Button>
+
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <Separator className="w-full" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-card px-2 text-muted-foreground">
+            <SmartText>Or continue with email</SmartText>
+          </span>
         </div>
       </div>
 
       <form onSubmit={handleEmailLogin} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">
+            <SmartText>Email</SmartText>
+          </Label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input
@@ -147,7 +186,9 @@ export function LoginForm() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">
+            <SmartText>Password</SmartText>
+          </Label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input
@@ -164,16 +205,29 @@ export function LoginForm() {
 
         <Button type="submit" disabled={isLoading} className="w-full h-12 text-base font-medium">
           {isLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
-          Sign In
+          <SmartText>Sign In</SmartText>
         </Button>
       </form>
 
       <div className="text-center text-sm">
-        <span className="text-muted-foreground">{"Don't have an account? "}</span>
+        <span className="text-muted-foreground">
+          <SmartText>Don't have an account? </SmartText>
+        </span>
         <Link href="/register" className="text-primary hover:underline font-medium">
-          Sign up
+          <SmartText>Sign up</SmartText>
         </Link>
       </div>
+
+      <Alert className="border-blue-200 bg-blue-50">
+        <AlertTriangle className="h-4 w-4 text-blue-600" />
+        <AlertDescription className="text-blue-800">
+          <SmartText as="strong">New to the platform?</SmartText>
+          <SmartText>
+           You'll need to create an account first using the "Sign up" link above, or try the demo mode to explore the features.
+          </SmartText>
+
+        </AlertDescription>
+      </Alert>
     </div>
   )
 }

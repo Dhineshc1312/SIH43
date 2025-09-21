@@ -64,7 +64,7 @@ class CropYieldPredictor:
     def predict_yield(self, 
                      crop: str,
                      area: float,
-                     production: float,
+                     
                      rainfall: float,
                      fertilizer: float,
                      pesticide: float) -> Dict:
@@ -93,7 +93,7 @@ class CropYieldPredictor:
             features = np.array([[
                 crop_encoded,
                 area,
-                production,
+                
                 rainfall,
                 fertilizer,
                 pesticide
@@ -129,7 +129,7 @@ class CropYieldPredictor:
                 "input_features": {
                     "crop": crop,
                     "area": area,
-                    "production": production,
+                    
                     "rainfall": rainfall,
                     "fertilizer": fertilizer,
                     "pesticide": pesticide
@@ -145,7 +145,7 @@ class CropYieldPredictor:
             return []
         
         feature_names = self.feature_names or [
-            'crop', 'area', 'production', 'rainfall', 'fertilizer', 'pesticide'
+            'crop', 'area',  'rainfall', 'fertilizer', 'pesticide'
         ]
         
         importances = self.model.feature_importances_

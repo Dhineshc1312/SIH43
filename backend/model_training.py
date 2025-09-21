@@ -31,7 +31,7 @@ df['Crop'] = le.fit_transform(df['Crop'])
 
 # Define features (X) and target (y)
 # Drop the target 'Yield' and other non-feature columns
-X = df.drop(['Yield', 'Crop_Year', 'State', 'Season'], axis=1)
+X = df.drop(['Yield', 'Production','Crop_Year', 'State', 'Season'], axis=1)
 y = df['Yield']
 
 # Split data into training and testing sets (80% train, 20% test)

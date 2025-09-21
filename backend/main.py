@@ -14,12 +14,12 @@ from typing import Optional, Dict
 import requests
 import uuid
 from model_utils import predictor
+from fertilizer_recommend import FertilizerModelPredictor
 import logging
 
 load_dotenv()
 
 app = FastAPI(title="Crop Yield Prediction API", version="1.0.0")
-
 logger = logging.getLogger("uvicorn.error")
 
 # CORS middleware
@@ -44,12 +44,14 @@ if not firebase_admin._apps:
 db = firestore.client()
 security = HTTPBearer()
 
+# Instantiate fertilizer model predictor globally
+fertilizer_predictor = FertilizerModelPredictor(model_path="ml_models")
+fertilizer_load_success = fertilizer_predictor.load_model()
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     logger.error(f"Validation error for request {request.url}: {exc.errors()}")
     return await request_validation_exception_handler(request, exc)
-
 
 @app.on_event("startup")
 async def startup_event():
@@ -65,8 +67,11 @@ async def startup_event():
     else:
         print("⚠️ ML model not loaded. Predictions will not work.")
 
+    if fertilizer_load_success:
+        print("✅ Fertilizer model loaded successfully")
+    else:
+        print("⚠️ Fertilizer model failed to load")
 
-# Pydantic models
 class PredictionRequest(BaseModel):
     farm_id: str
     crop: str
@@ -80,15 +85,16 @@ class PredictionRequest(BaseModel):
     rainfall: Optional[float] = None
     temperature: Optional[float] = None
     humidity: Optional[float] = None
+    moisture: Optional[float] = None
     sowing_date: Optional[str] = None
-
+    soil_type: Optional[str] = None
+    crop_type: Optional[str] = None
 
 class FarmData(BaseModel):
     name: str
-    location: Dict[str, float]  # {"lat": float, "lon": float}
+    location: Dict[str, float]
     soil_type: str
     area_ha: float
-
 
 class UserProfile(BaseModel):
     name: str
@@ -96,8 +102,6 @@ class UserProfile(BaseModel):
     phone: Optional[str] = None
     role: Optional[str] = "farmer"
 
-
-# Authentication dependency
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         decoded_token = auth.verify_id_token(credentials.credentials)
@@ -109,8 +113,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-
-# Weather API helper
 def get_weather_data(lat: float, lon: float) -> Dict[str, float]:
     api_key = os.getenv("OPENWEATHER_API_KEY")
     if not api_key:
@@ -129,7 +131,6 @@ def get_weather_data(lat: float, lon: float) -> Dict[str, float]:
         print(f"Weather API error: {e}")
         return {"temperature": 25.0, "humidity": 60.0, "rainfall": 100.0}
 
-
 @app.get("/")
 async def root():
     return {
@@ -139,13 +140,11 @@ async def root():
         "available_crops": predictor.get_available_crops() if predictor.is_loaded else []
     }
 
-
 @app.get("/api/crops")
 async def get_available_crops():
     if not predictor.is_loaded:
         raise HTTPException(status_code=503, detail="ML model not available")
     return {"crops": predictor.get_available_crops()}
-
 
 @app.post("/api/predict")
 async def predict_yield(request: PredictionRequest, user=Depends(get_current_user)):
@@ -184,14 +183,28 @@ async def predict_yield(request: PredictionRequest, user=Depends(get_current_use
         prediction_result = predictor.predict_yield(
             crop=request.crop,
             area=request.area,
-            N=request.N,
-            P=request.P,
-            K=request.K,
-            ph=request.ph,
             rainfall=rainfall,
             fertilizer=request.fertilizer,
-            pesticide=request.pesticide
+            pesticide=request.pesticide,
         )
+
+        fertilizer_inputs = {
+            "temperature": request.temperature,
+            "humidity": request.humidity,
+            "moisture": request.moisture,
+            "soil_type": request.soil_type,
+            "crop_type": request.crop_type,
+            "nitrogen": request.N,
+            "phosphorous": request.P,
+            "potassium": request.K,
+        }
+
+        fertilizer_result = None
+        if fertilizer_load_success:
+            try:
+                fertilizer_result = fertilizer_predictor.predict(**fertilizer_inputs)
+            except Exception as e:
+                logger.error(f"Fertilizer prediction failed: {e}")
 
         result = {
             "request_id": request_id,
@@ -206,9 +219,13 @@ async def predict_yield(request: PredictionRequest, user=Depends(get_current_use
             "weather_data": {
                 "rainfall": rainfall,
                 "temperature": request.temperature,
-                "humidity": request.humidity
+                "humidity": request.humidity,
+                "moisture": request.moisture
             }
         }
+
+        if fertilizer_result is not None:
+            result["fertilizer_recommendation"] = fertilizer_result
 
         prediction_ref.update({
             "outputs": result,
@@ -229,8 +246,6 @@ async def predict_yield(request: PredictionRequest, user=Depends(get_current_use
                 "completed_at": datetime.utcnow(),
             })
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
-
-
 
 @app.post("/api/add-farm")
 async def add_farm(farm: FarmData, user=Depends(get_current_user)):
@@ -254,7 +269,6 @@ async def add_farm(farm: FarmData, user=Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to add farm: {str(e)}")
 
-
 @app.get("/api/get-farms")
 async def get_farms(user=Depends(get_current_user)):
     try:
@@ -267,7 +281,6 @@ async def get_farms(user=Depends(get_current_user)):
         logger.error(f"Failed to get farms: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get farms: {str(e)}")
 
-
 @app.get("/api/get-predictions")
 async def get_predictions(user=Depends(get_current_user)):
     try:
@@ -279,7 +292,6 @@ async def get_predictions(user=Depends(get_current_user)):
         return {"predictions": predictions}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get predictions: {str(e)}")
-
 
 @app.post("/api/update-profile")
 async def update_profile(profile: UserProfile, user=Depends(get_current_user)):
@@ -301,10 +313,12 @@ async def update_profile(profile: UserProfile, user=Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update profile: {str(e)}")
 
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+
 
 
 

@@ -52,6 +52,8 @@ class ApiClient {
   async predictYield(predictionData: {
     farm_id: string
     crop: string
+    soil_type?: string       // Added optional soil_type
+    crop_type?: string       // Added optional crop_type
     N: number
     P: number
     K: number
@@ -59,6 +61,7 @@ class ApiClient {
     temperature?: number
     humidity?: number
     rainfall?: number
+    moisture?: number
     sowing_date: string
     area: number
     fertilizer: number

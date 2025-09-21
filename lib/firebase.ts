@@ -1,5 +1,4 @@
-"use client"
-
+// lib/firebase.ts
 import firebase from "firebase/compat/app"
 import "firebase/compat/auth"
 import "firebase/compat/firestore"
@@ -52,7 +51,7 @@ const initializeFirebase = () => {
 // Initialize Firebase
 initializeFirebase()
 
-export const getFirebaseAuth = () => {
+export const getFirebaseAuth = (): firebase.auth.Auth | null => {
   if (typeof window === "undefined" || !firebaseInitialized) {
     return null
   }
@@ -65,7 +64,7 @@ export const getFirebaseAuth = () => {
   }
 }
 
-export const getFirebaseDb = () => {
+export const getFirebaseDb = (): firebase.firestore.Firestore | null => {
   if (typeof window === "undefined" || !firebaseInitialized) {
     return null
   }
@@ -78,7 +77,7 @@ export const getFirebaseDb = () => {
   }
 }
 
-export const getFirebaseApp = () => {
+export const getFirebaseApp = (): firebase.app.App | null => {
   if (typeof window === "undefined" || !firebaseInitialized) {
     return null
   }
@@ -91,7 +90,8 @@ export const getFirebaseApp = () => {
   }
 }
 
-// Export instances (will be null if not initialized)
-export const auth = getFirebaseAuth()
-export const db = getFirebaseDb()
+// Export instances (null if not initialized)
+export const auth: firebase.auth.Auth | null = getFirebaseAuth()
+export const db: firebase.firestore.Firestore | null = getFirebaseDb()
+
 

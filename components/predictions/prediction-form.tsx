@@ -1,6 +1,6 @@
 "use client"
 
-import type React from "react"
+import React from "react"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,7 +16,6 @@ interface PredictionFormProps {
   onPredictionComplete: (result: any) => void
 }
 
-// Define Farm type explicitly
 type Farm = {
   farm_id: string
   name: string
@@ -26,18 +25,12 @@ type Farm = {
 }
 
 const cropTypes = [
-  "Wheat",
-  "Rice",
-  "Maize",
-  "Barley",
-  "Soybean",
-  "Cotton",
-  "Sugarcane",
-  "Potato",
-  "Tomato",
-  "Onion",
-  "Groundnut",
-  "Sunflower",
+  "Wheat", "Rice", "Maize", "Barley", "Soybean", "Cotton", "Sugarcane", "Potato",
+  "Tomato", "Onion", "Groundnut", "Sunflower",
+]
+
+const soilTypes = [
+  "Sandy", "Clay", "Silt", "Peat", "Chalk", "Loam",
 ]
 
 export function PredictionForm({ onPredictionComplete }: PredictionFormProps) {
@@ -47,18 +40,20 @@ export function PredictionForm({ onPredictionComplete }: PredictionFormProps) {
   const [formData, setFormData] = useState({
     farm_id: "",
     crop: "",
+    soil_type: "",
+    crop_type: "",
     area: "",
-    // Added the missing nutrient and soil pH fields
     N: "",
     P: "",
     K: "",
     ph: "",
     rainfall: "",
+    temperature: "",
+    humidity: "",
+    moisture: "",
     fertilizer: "",
     pesticide: "",
     sowing_date: "",
-    temperature: "",
-    humidity: "",
   })
   const { toast } = useToast()
 
@@ -82,32 +77,37 @@ export function PredictionForm({ onPredictionComplete }: PredictionFormProps) {
     }
   }
 
+  const safeParseNumber = (value: string, fallback: number = 0): number => {
+    const parsed = Number.parseFloat(value)
+    return isNaN(parsed) ? fallback : parsed
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-
     try {
       const result = await apiClient.predictYield({
         farm_id: formData.farm_id,
         crop: formData.crop,
-        N: Number.parseFloat(formData.N),
-        P: Number.parseFloat(formData.P),
-        K: Number.parseFloat(formData.K),
-        ph: Number.parseFloat(formData.ph),
+        soil_type: formData.soil_type,
+        crop_type: formData.crop_type,
+        N: safeParseNumber(formData.N),
+        P: safeParseNumber(formData.P),
+        K: safeParseNumber(formData.K),
+        ph: safeParseNumber(formData.ph),
         temperature: formData.temperature ? Number.parseFloat(formData.temperature) : undefined,
         humidity: formData.humidity ? Number.parseFloat(formData.humidity) : undefined,
+        moisture: formData.moisture ? Number.parseFloat(formData.moisture) : undefined,
         rainfall: formData.rainfall ? Number.parseFloat(formData.rainfall) : undefined,
         sowing_date: formData.sowing_date,
-        area: Number.parseFloat(formData.area),
-        fertilizer: Number.parseFloat(formData.fertilizer),
-        pesticide: Number.parseFloat(formData.pesticide),
+        area: safeParseNumber(formData.area),
+        fertilizer: safeParseNumber(formData.fertilizer),
+        pesticide: safeParseNumber(formData.pesticide),
       })
-
       toast({
         title: "Prediction completed!",
         description: "Your crop yield prediction has been generated successfully.",
       })
-
       onPredictionComplete(result)
     } catch (error: any) {
       toast({
@@ -183,7 +183,7 @@ export function PredictionForm({ onPredictionComplete }: PredictionFormProps) {
           {/* Crop Information */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Crop Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="crop">Crop Type</Label>
                 <Select
@@ -204,154 +204,203 @@ export function PredictionForm({ onPredictionComplete }: PredictionFormProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="sowing_date">Sowing Date</Label>
-                <Input
-                  id="sowing_date"
-                  type="date"
-                  value={formData.sowing_date}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, sowing_date: e.target.value }))}
-                  required
-                />
+                <Label htmlFor="soil_type">Soil Type</Label>
+                <Select
+                  value={formData.soil_type}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, soil_type: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select soil type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {soilTypes.map((soil) => (
+                      <SelectItem key={soil} value={soil}>
+                        {soil}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="crop_type">Crop Type (Fertilizer Model)</Label>
+                <Select
+                  value={formData.crop_type}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, crop_type: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select crop type for fertilizer model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cropTypes.map((crop) => (
+                      <SelectItem key={crop} value={crop}>
+                        {crop}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
 
           <Separator />
 
-          {/* Farm Details */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium">Farm Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="area">Cultivation Area (hectares)</Label>
-                <Input
-                  id="area"
-                  type="number"
-                  step="0.1"
-                  placeholder="e.g., 2.5"
-                  value={formData.area}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, area: e.target.value }))}
-                  required
-                />
-              </div>
-
-              {/* Nutrients N, P, K */}
-              <div className="space-y-2">
-                <Label htmlFor="N">Nitrogen (N) content (kg/ha)</Label>
-                <Input
-                  id="N"
-                  type="number"
-                  step="0.1"
-                  placeholder="e.g., 50.0"
-                  value={formData.N}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, N: e.target.value }))}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="P">Phosphorus (P) content (kg/ha)</Label>
-                <Input
-                  id="P"
-                  type="number"
-                  step="0.1"
-                  placeholder="e.g., 30.0"
-                  value={formData.P}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, P: e.target.value }))}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="K">Potassium (K) content (kg/ha)</Label>
-                <Input
-                  id="K"
-                  type="number"
-                  step="0.1"
-                  placeholder="e.g., 20.0"
-                  value={formData.K}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, K: e.target.value }))}
-                  required
-                />
-              </div>
-
-              {/* Soil pH */}
-              <div className="space-y-2">
-                <Label htmlFor="ph">Soil pH</Label>
-                <Input
-                  id="ph"
-                  type="number"
-                  step="0.1"
-                  placeholder="e.g., 6.5"
-                  value={formData.ph}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, ph: e.target.value }))}
-                  required
-                />
-              </div>
-            </div>
+          {/* Cultivation Area */}
+          <div className="space-y-2">
+            <Label htmlFor="area">Cultivation Area (hectares)</Label>
+            <Input
+              id="area"
+              type="number"
+              step="0.1"
+              placeholder="e.g., 2.5"
+              value={formData.area}
+              onChange={(e) => setFormData((prev) => ({ ...prev, area: e.target.value }))}
+              required
+            />
           </div>
 
-          <Separator />
+          {/* Nutrients */}
+          <div className="space-y-2">
+            <Label htmlFor="N">Nitrogen (N) content (kg/ha)</Label>
+            <Input
+              id="N"
+              type="number"
+              step="0.1"
+              placeholder="e.g., 50.0"
+              value={formData.N}
+              onChange={(e) => setFormData((prev) => ({ ...prev, N: e.target.value }))}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="P">Phosphorus (P) content (kg/ha)</Label>
+            <Input
+              id="P"
+              type="number"
+              step="0.1"
+              placeholder="e.g., 30.0"
+              value={formData.P}
+              onChange={(e) => setFormData((prev) => ({ ...prev, P: e.target.value }))}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="K">Potassium (K) content (kg/ha)</Label>
+            <Input
+              id="K"
+              type="number"
+              step="0.1"
+              placeholder="e.g., 20.0"
+              value={formData.K}
+              onChange={(e) => setFormData((prev) => ({ ...prev, K: e.target.value }))}
+              required
+            />
+          </div>
+
+          {/* Soil pH */}
+          <div className="space-y-2">
+            <Label htmlFor="ph">Soil pH</Label>
+            <Input
+              id="ph"
+              type="number"
+              step="0.1"
+              placeholder="e.g., 6.5"
+              value={formData.ph}
+              onChange={(e) => setFormData((prev) => ({ ...prev, ph: e.target.value }))}
+              required
+            />
+          </div>
 
           {/* Environmental Conditions */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium flex items-center gap-2">
-              <Thermometer className="w-5 h-5" />
-              Environmental Conditions
-            </h3>
-            <div className="space-y-2">
-              <Label htmlFor="rainfall">Annual Rainfall (mm/year)</Label>
-              <div className="relative">
-                <Droplets className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="rainfall"
-                  type="number"
-                  step="0.1"
-                  placeholder="Leave empty to use weather data"
-                  value={formData.rainfall}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, rainfall: e.target.value }))}
-                  className="pl-10"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                If left empty, we'll use current weather data for your farm location.
-              </p>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="rainfall">Annual Rainfall (mm/year)</Label>
+            <Input
+              id="rainfall"
+              type="number"
+              step="0.1"
+              placeholder="Leave empty to use weather data"
+              value={formData.rainfall}
+              onChange={(e) => setFormData((prev) => ({ ...prev, rainfall: e.target.value }))}
+            />
+            <p className="text-xs text-muted-foreground">
+              If left empty, we'll use current weather data for your farm location.
+            </p>
           </div>
 
-          <Separator />
+          <div className="space-y-2">
+            <Label htmlFor="temperature">Temperature (°C)</Label>
+            <Input
+              id="temperature"
+              type="number"
+              step="0.1"
+              placeholder="Leave empty to use weather data"
+              value={formData.temperature}
+              onChange={(e) => setFormData((prev) => ({ ...prev, temperature: e.target.value }))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="humidity">Humidity (%)</Label>
+            <Input
+              id="humidity"
+              type="number"
+              step="0.1"
+              placeholder="Leave empty to use weather data"
+              value={formData.humidity}
+              onChange={(e) => setFormData((prev) => ({ ...prev, humidity: e.target.value }))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="moisture">Soil Moisture (%)</Label>
+            <Input
+              id="moisture"
+              type="number"
+              step="0.1"
+              placeholder="Enter soil moisture"
+              value={formData.moisture}
+              onChange={(e) => setFormData((prev) => ({ ...prev, moisture: e.target.value }))}
+            />
+          </div>
 
           {/* Agricultural Inputs */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium flex items-center gap-2">
-              <Beaker className="w-5 h-5" />
-              Agricultural Inputs
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="fertilizer">Fertilizer Usage (kg)</Label>
-                <Input
-                  id="fertilizer"
-                  type="number"
-                  step="0.1"
-                  placeholder="e.g., 150.5"
-                  value={formData.fertilizer}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, fertilizer: e.target.value }))}
-                  required
-                />
-              </div>
+          <div className="space-y-2">
+            <Label htmlFor="fertilizer">Fertilizer Usage (kg)</Label>
+            <Input
+              id="fertilizer"
+              type="number"
+              step="0.1"
+              placeholder="e.g., 150.5"
+              value={formData.fertilizer}
+              onChange={(e) => setFormData((prev) => ({ ...prev, fertilizer: e.target.value }))}
+              required
+            />
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="pesticide">Pesticide Usage (kg)</Label>
-                <Input
-                  id="pesticide"
-                  type="number"
-                  step="0.1"
-                  placeholder="e.g., 25.0"
-                  value={formData.pesticide}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, pesticide: e.target.value }))}
-                  required
-                />
-              </div>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="pesticide">Pesticide Usage (kg)</Label>
+            <Input
+              id="pesticide"
+              type="number"
+              step="0.1"
+              placeholder="e.g., 25.0"
+              value={formData.pesticide}
+              onChange={(e) => setFormData((prev) => ({ ...prev, pesticide: e.target.value }))}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="sowing_date">Sowing Date</Label>
+            <Input
+              id="sowing_date"
+              type="date"
+              value={formData.sowing_date}
+              onChange={(e) => setFormData((prev) => ({ ...prev, sowing_date: e.target.value }))}
+              required
+            />
           </div>
 
           <Button type="submit" disabled={isLoading} className="w-full">
@@ -363,4 +412,9 @@ export function PredictionForm({ onPredictionComplete }: PredictionFormProps) {
     </Card>
   )
 }
+
+
+
+
+
 

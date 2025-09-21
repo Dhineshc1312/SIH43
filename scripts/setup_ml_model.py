@@ -61,7 +61,7 @@ def train_model():
         
         # Prepare features and target
         # Using the same features as in the original model
-        X = df[['Crop', 'Area', 'Production', 'Annual_Rainfall', 'Fertilizer', 'Pesticide']]
+        X = df[['Crop', 'Area',  'Annual_Rainfall', 'Fertilizer', 'Pesticide']]
         y = df['Yield']
         
         print(f"Features shape: {X.shape}")

@@ -1,7 +1,4 @@
-"use client"
-import React from "react"
-
-
+import type React from "react"
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -10,7 +7,6 @@ import { apiClient } from "@/lib/api"
 import { Calendar, TrendingUp, MapPin, Loader2 } from "lucide-react"
 import { format } from "date-fns"
 
-// Define Prediction type to match your data structure
 type Prediction = {
   farm_id: string
   status: string
@@ -19,10 +15,16 @@ type Prediction = {
     nanoseconds?: number
   }
   outputs?: {
-    predicted_yield_kg_per_ha: number
-    confidence_interval?: {
-      lower: number
-      upper: number
+    crop_yield_prediction?: {
+      predicted_yield_kg_per_ha: number
+      confidence_interval?: {
+        lower: number
+        upper: number
+      }
+    }
+    fertilizer_recommendation?: {
+      recommended_fertilizer: string
+      confidence?: number
     }
   }
   inputs?: {
@@ -51,6 +53,13 @@ export function PredictionHistory() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  function formatTimestamp(timestamp?: number) {
+    if (!timestamp) return "Date not available"
+    const date = new Date(timestamp * 1000)
+    if (isNaN(date.getTime())) return "Invalid date"
+    return format(date, "PPP")
   }
 
   if (isLoading) {
@@ -95,24 +104,42 @@ export function PredictionHistory() {
             </div>
             <CardDescription className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
-              {format(new Date(prediction.created_at.seconds * 1000), "PPP")}
+              {formatTimestamp(prediction.created_at?.seconds)}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {prediction.status === "complete" && prediction.outputs ? (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-2xl font-bold text-primary">
-                      {prediction.outputs.predicted_yield_kg_per_ha} kg/ha
+                {prediction.outputs.crop_yield_prediction && (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-primary">
+                        {prediction.outputs.crop_yield_prediction.predicted_yield_kg_per_ha} kg/ha
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Range:{" "}
+                        {prediction.outputs.crop_yield_prediction.confidence_interval?.lower.toFixed(1)} -{" "}
+                        {prediction.outputs.crop_yield_prediction.confidence_interval?.upper.toFixed(1)} kg/ha
+                      </div>
                     </div>
-                    <div className="text-sm text-muted-foreground">
-                      Range: {prediction.outputs.confidence_interval?.lower.toFixed(1)} -{" "}
-                      {prediction.outputs.confidence_interval?.upper.toFixed(1)} kg/ha
-                    </div>
+                    <TrendingUp className="w-8 h-8 text-muted-foreground" />
                   </div>
-                  <TrendingUp className="w-8 h-8 text-muted-foreground" />
-                </div>
+                )}
+
+                {prediction.outputs.fertilizer_recommendation && (
+                  <div className="mt-4 p-4 bg-green-50 rounded-md">
+                    <h4 className="font-medium text-lg">Fertilizer Recommendation</h4>
+                    <p>
+                      Recommended:{" "}
+                      <span className="font-semibold">{prediction.outputs.fertilizer_recommendation.recommended_fertilizer}</span>
+                    </p>
+                    {prediction.outputs.fertilizer_recommendation.confidence && (
+                      <p>
+                        Confidence: {(prediction.outputs.fertilizer_recommendation.confidence * 100).toFixed(1)}%
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {prediction.inputs && (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -151,4 +178,6 @@ export function PredictionHistory() {
     </div>
   )
 }
+
+
 
