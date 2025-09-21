@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,6 +14,15 @@ import { Loader2, Sprout, MapPin, Thermometer, Droplets, Beaker } from "lucide-r
 
 interface PredictionFormProps {
   onPredictionComplete: (result: any) => void
+}
+
+// Define Farm type explicitly
+type Farm = {
+  farm_id: string
+  name: string
+  location: { lat: number; lon: number }
+  soil_type: string
+  area_ha: number
 }
 
 const cropTypes = [
@@ -33,18 +41,24 @@ const cropTypes = [
 ]
 
 export function PredictionForm({ onPredictionComplete }: PredictionFormProps) {
-  const [farms, setFarms] = useState([])
+  const [farms, setFarms] = useState<Farm[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingFarms, setIsLoadingFarms] = useState(true)
   const [formData, setFormData] = useState({
     farm_id: "",
     crop: "",
     area: "",
-    production: "",
+    // Added the missing nutrient and soil pH fields
+    N: "",
+    P: "",
+    K: "",
+    ph: "",
     rainfall: "",
     fertilizer: "",
     pesticide: "",
     sowing_date: "",
+    temperature: "",
+    humidity: "",
   })
   const { toast } = useToast()
 
@@ -76,12 +90,17 @@ export function PredictionForm({ onPredictionComplete }: PredictionFormProps) {
       const result = await apiClient.predictYield({
         farm_id: formData.farm_id,
         crop: formData.crop,
-        area: Number.parseFloat(formData.area),
-        production: Number.parseFloat(formData.production),
+        N: Number.parseFloat(formData.N),
+        P: Number.parseFloat(formData.P),
+        K: Number.parseFloat(formData.K),
+        ph: Number.parseFloat(formData.ph),
+        temperature: formData.temperature ? Number.parseFloat(formData.temperature) : undefined,
+        humidity: formData.humidity ? Number.parseFloat(formData.humidity) : undefined,
         rainfall: formData.rainfall ? Number.parseFloat(formData.rainfall) : undefined,
+        sowing_date: formData.sowing_date,
+        area: Number.parseFloat(formData.area),
         fertilizer: Number.parseFloat(formData.fertilizer),
         pesticide: Number.parseFloat(formData.pesticide),
-        sowing_date: formData.sowing_date,
       })
 
       toast({
@@ -147,7 +166,7 @@ export function PredictionForm({ onPredictionComplete }: PredictionFormProps) {
                 <SelectValue placeholder="Choose a farm" />
               </SelectTrigger>
               <SelectContent>
-                {farms.map((farm: any) => (
+                {farms.map((farm) => (
                   <SelectItem key={farm.farm_id} value={farm.farm_id}>
                     <div className="flex items-center gap-2">
                       <MapPin className="w-4 h-4" />
@@ -216,15 +235,54 @@ export function PredictionForm({ onPredictionComplete }: PredictionFormProps) {
                 />
               </div>
 
+              {/* Nutrients N, P, K */}
               <div className="space-y-2">
-                <Label htmlFor="production">Expected Production (metric tons)</Label>
+                <Label htmlFor="N">Nitrogen (N) content (kg/ha)</Label>
                 <Input
-                  id="production"
+                  id="N"
                   type="number"
                   step="0.1"
-                  placeholder="e.g., 5.2"
-                  value={formData.production}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, production: e.target.value }))}
+                  placeholder="e.g., 50.0"
+                  value={formData.N}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, N: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="P">Phosphorus (P) content (kg/ha)</Label>
+                <Input
+                  id="P"
+                  type="number"
+                  step="0.1"
+                  placeholder="e.g., 30.0"
+                  value={formData.P}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, P: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="K">Potassium (K) content (kg/ha)</Label>
+                <Input
+                  id="K"
+                  type="number"
+                  step="0.1"
+                  placeholder="e.g., 20.0"
+                  value={formData.K}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, K: e.target.value }))}
+                  required
+                />
+              </div>
+
+              {/* Soil pH */}
+              <div className="space-y-2">
+                <Label htmlFor="ph">Soil pH</Label>
+                <Input
+                  id="ph"
+                  type="number"
+                  step="0.1"
+                  placeholder="e.g., 6.5"
+                  value={formData.ph}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, ph: e.target.value }))}
                   required
                 />
               </div>
@@ -305,3 +363,4 @@ export function PredictionForm({ onPredictionComplete }: PredictionFormProps) {
     </Card>
   )
 }
+

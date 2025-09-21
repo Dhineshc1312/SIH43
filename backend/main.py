@@ -1,20 +1,26 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.exception_handlers import request_validation_exception_handler
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
 from datetime import datetime
 import os
 from dotenv import load_dotenv
 from pydantic import BaseModel
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict
 import requests
 import uuid
 from model_utils import predictor
+import logging
 
 load_dotenv()
 
 app = FastAPI(title="Crop Yield Prediction API", version="1.0.0")
+
+logger = logging.getLogger("uvicorn.error")
 
 # CORS middleware
 app.add_middleware(
@@ -27,7 +33,6 @@ app.add_middleware(
 
 # Initialize Firebase Admin
 if not firebase_admin._apps:
-    # For local development, use service account key
     try:
         cred = credentials.Certificate("firebase-service-account.json")
         firebase_admin.initialize_app(cred)
@@ -39,7 +44,13 @@ if not firebase_admin._apps:
 db = firestore.client()
 security = HTTPBearer()
 
-# Load ML model and check service account file on startup
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"Validation error for request {request.url}: {exc.errors()}")
+    return await request_validation_exception_handler(request, exc)
+
+
 @app.on_event("startup")
 async def startup_event():
     if not os.path.isfile("firebase-service-account.json"):
@@ -55,22 +66,22 @@ async def startup_event():
         print("⚠️ ML model not loaded. Predictions will not work.")
 
 
-# (The rest of your API routes and functions remain unchanged)
-# ...
-
 # Pydantic models
 class PredictionRequest(BaseModel):
     farm_id: str
     crop: str
     area: float
-    production: float
-    rainfall: Optional[float] = None
+    N: float
+    P: float
+    K: float
+    ph: float
     fertilizer: float
     pesticide: float
-    # Additional fields for enhanced prediction
+    rainfall: Optional[float] = None
     temperature: Optional[float] = None
     humidity: Optional[float] = None
     sowing_date: Optional[str] = None
+
 
 class FarmData(BaseModel):
     name: str
@@ -78,16 +89,17 @@ class FarmData(BaseModel):
     soil_type: str
     area_ha: float
 
+
 class UserProfile(BaseModel):
     name: str
     email: str
     phone: Optional[str] = None
     role: Optional[str] = "farmer"
 
+
 # Authentication dependency
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
-        # Verify Firebase ID token
         decoded_token = auth.verify_id_token(credentials.credentials)
         return decoded_token
     except Exception as e:
@@ -97,27 +109,26 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+
 # Weather API helper
 def get_weather_data(lat: float, lon: float) -> Dict[str, float]:
-    """Fetch weather data from OpenWeatherMap API"""
     api_key = os.getenv("OPENWEATHER_API_KEY")
     if not api_key:
-        # Return default values if no API key
         return {"temperature": 25.0, "humidity": 60.0, "rainfall": 100.0}
     
     try:
         url = f"http://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric"
         response = requests.get(url)
         data = response.json()
-        
         return {
             "temperature": data["main"]["temp"],
             "humidity": data["main"]["humidity"],
-            "rainfall": data.get("rain", {}).get("1h", 0) * 24  # Convert to daily
+            "rainfall": data.get("rain", {}).get("1h", 0) * 24
         }
     except Exception as e:
         print(f"Weather API error: {e}")
         return {"temperature": 25.0, "humidity": 60.0, "rainfall": 100.0}
+
 
 @app.get("/")
 async def root():
@@ -128,24 +139,25 @@ async def root():
         "available_crops": predictor.get_available_crops() if predictor.is_loaded else []
     }
 
+
 @app.get("/api/crops")
 async def get_available_crops():
-    """Get list of available crop types"""
     if not predictor.is_loaded:
         raise HTTPException(status_code=503, detail="ML model not available")
-    
     return {"crops": predictor.get_available_crops()}
 
+
 @app.post("/api/predict")
-async def predict_yield(request: PredictionRequest, user = Depends(get_current_user)):
+async def predict_yield(request: PredictionRequest, user=Depends(get_current_user)):
     if not predictor.is_loaded:
         raise HTTPException(status_code=503, detail="ML model not available")
-    
+
     try:
         user_id = user["uid"]
         request_id = str(uuid.uuid4())
-        
-        # Save prediction request to Firestore
+
+        logger.info(f"Starting prediction for user {user_id} with request id {request_id} and inputs: {request}")
+
         prediction_ref = db.collection("users").document(user_id).collection("predictions").document(request_id)
         prediction_ref.set({
             "farm_id": request.farm_id,
@@ -153,12 +165,10 @@ async def predict_yield(request: PredictionRequest, user = Depends(get_current_u
             "status": "pending",
             "created_at": datetime.utcnow(),
         })
-        
-        # Get weather data if not provided and farm location is available
+
         rainfall = request.rainfall
         if rainfall is None:
             try:
-                # Get farm location
                 farm_ref = db.collection("users").document(user_id).collection("farms").document(request.farm_id)
                 farm_doc = farm_ref.get()
                 if farm_doc.exists():
@@ -166,22 +176,23 @@ async def predict_yield(request: PredictionRequest, user = Depends(get_current_u
                     weather = get_weather_data(farm_data["location"]["lat"], farm_data["location"]["lon"])
                     rainfall = weather["rainfall"]
                 else:
-                    rainfall = 100.0  # Default rainfall
+                    rainfall = 100.0
             except Exception as e:
-                print(f"Error getting weather data: {e}")
+                logger.error(f"Error getting weather data: {e}")
                 rainfall = 100.0
-        
-        # Make prediction using the enhanced predictor
+
         prediction_result = predictor.predict_yield(
             crop=request.crop,
             area=request.area,
-            production=request.production,
+            N=request.N,
+            P=request.P,
+            K=request.K,
+            ph=request.ph,
             rainfall=rainfall,
             fertilizer=request.fertilizer,
             pesticide=request.pesticide
         )
-        
-        # Format response
+
         result = {
             "request_id": request_id,
             "farm_id": request.farm_id,
@@ -190,26 +201,27 @@ async def predict_yield(request: PredictionRequest, user = Depends(get_current_u
                 "lower": round(prediction_result["confidence_interval"]["lower"], 2),
                 "upper": round(prediction_result["confidence_interval"]["upper"], 2)
             },
-            "model_version": prediction_result["model_version"],
-            "feature_importance": prediction_result["feature_importance"],
+            "model_version": prediction_result.get("model_version"),
+            "feature_importance": prediction_result.get("feature_importance"),
             "weather_data": {
                 "rainfall": rainfall,
                 "temperature": request.temperature,
                 "humidity": request.humidity
             }
         }
-        
-        # Update Firestore with results
+
         prediction_ref.update({
             "outputs": result,
             "status": "complete",
             "completed_at": datetime.utcnow(),
         })
-        
+
+        logger.info(f"Prediction completed successfully for request id {request_id}")
+
         return result
-        
+
     except Exception as e:
-        # Update status to error
+        logger.error(f"Prediction failed: {e}")
         if 'prediction_ref' in locals():
             prediction_ref.update({
                 "status": "error",
@@ -218,12 +230,14 @@ async def predict_yield(request: PredictionRequest, user = Depends(get_current_u
             })
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
+
+
 @app.post("/api/add-farm")
-async def add_farm(farm: FarmData, user = Depends(get_current_user)):
+async def add_farm(farm: FarmData, user=Depends(get_current_user)):
     try:
         user_id = user["uid"]
         farm_id = str(uuid.uuid4())
-        
+
         farm_data = {
             "farm_id": farm_id,
             "name": farm.name,
@@ -232,51 +246,46 @@ async def add_farm(farm: FarmData, user = Depends(get_current_user)):
             "area_ha": farm.area_ha,
             "created_at": datetime.utcnow(),
         }
-        
+
         db.collection("users").document(user_id).collection("farms").document(farm_id).set(farm_data)
-        
+
         return {"farm_id": farm_id, "message": "Farm added successfully"}
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to add farm: {str(e)}")
 
+
 @app.get("/api/get-farms")
-async def get_farms(user = Depends(get_current_user)):
+async def get_farms(user=Depends(get_current_user)):
     try:
         user_id = user["uid"]
+        logger.info(f"Fetching farms for user {user_id}")
         farms_ref = db.collection("users").document(user_id).collection("farms")
-        farms = []
-        
-        for doc in farms_ref.stream():
-            farm_data = doc.to_dict()
-            farms.append(farm_data)
-        
+        farms = [doc.to_dict() for doc in farms_ref.stream()]
         return {"farms": farms}
-        
     except Exception as e:
+        logger.error(f"Failed to get farms: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get farms: {str(e)}")
 
+
 @app.get("/api/get-predictions")
-async def get_predictions(user = Depends(get_current_user)):
+async def get_predictions(user=Depends(get_current_user)):
     try:
         user_id = user["uid"]
         predictions_ref = db.collection("users").document(user_id).collection("predictions")
         predictions = []
-        
         for doc in predictions_ref.order_by("created_at", direction=firestore.Query.DESCENDING).stream():
-            prediction_data = doc.to_dict()
-            predictions.append(prediction_data)
-        
+            predictions.append(doc.to_dict())
         return {"predictions": predictions}
-        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get predictions: {str(e)}")
 
+
 @app.post("/api/update-profile")
-async def update_profile(profile: UserProfile, user = Depends(get_current_user)):
+async def update_profile(profile: UserProfile, user=Depends(get_current_user)):
     try:
         user_id = user["uid"]
-        
+
         profile_data = {
             "name": profile.name,
             "email": profile.email,
@@ -284,14 +293,18 @@ async def update_profile(profile: UserProfile, user = Depends(get_current_user))
             "role": profile.role,
             "updated_at": datetime.utcnow(),
         }
-        
+
         db.collection("users").document(user_id).set(profile_data, merge=True)
-        
+
         return {"message": "Profile updated successfully"}
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update profile: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+

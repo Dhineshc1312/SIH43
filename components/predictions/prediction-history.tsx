@@ -1,4 +1,6 @@
 "use client"
+import React from "react"
+
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,8 +10,32 @@ import { apiClient } from "@/lib/api"
 import { Calendar, TrendingUp, MapPin, Loader2 } from "lucide-react"
 import { format } from "date-fns"
 
+// Define Prediction type to match your data structure
+type Prediction = {
+  farm_id: string
+  status: string
+  created_at: {
+    seconds: number
+    nanoseconds?: number
+  }
+  outputs?: {
+    predicted_yield_kg_per_ha: number
+    confidence_interval?: {
+      lower: number
+      upper: number
+    }
+  }
+  inputs?: {
+    crop: string
+    area: number
+    fertilizer: number
+    pesticide: number
+  }
+  error?: string
+}
+
 export function PredictionHistory() {
-  const [predictions, setPredictions] = useState([])
+  const [predictions, setPredictions] = useState<Prediction[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -45,7 +71,9 @@ export function PredictionHistory() {
           <CardDescription>You haven't made any yield predictions yet.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={() => (window.location.href = "/dashboard/predictions/new")}>Make First Prediction</Button>
+          <Button onClick={() => (window.location.href = "/dashboard/predictions/new")}>
+            Make First Prediction
+          </Button>
         </CardContent>
       </Card>
     )
@@ -53,7 +81,7 @@ export function PredictionHistory() {
 
   return (
     <div className="space-y-4">
-      {predictions.map((prediction: any, index: number) => (
+      {predictions.map((prediction, index) => (
         <Card key={index}>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -61,7 +89,9 @@ export function PredictionHistory() {
                 <MapPin className="w-4 h-4" />
                 Farm: {prediction.farm_id}
               </CardTitle>
-              <Badge variant={prediction.status === "complete" ? "default" : "secondary"}>{prediction.status}</Badge>
+              <Badge variant={prediction.status === "complete" ? "default" : "secondary"}>
+                {prediction.status}
+              </Badge>
             </div>
             <CardDescription className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
@@ -77,8 +107,8 @@ export function PredictionHistory() {
                       {prediction.outputs.predicted_yield_kg_per_ha} kg/ha
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      Range: {prediction.outputs.confidence_interval?.lower?.toFixed(1)} -{" "}
-                      {prediction.outputs.confidence_interval?.upper?.toFixed(1)} kg/ha
+                      Range: {prediction.outputs.confidence_interval?.lower.toFixed(1)} -{" "}
+                      {prediction.outputs.confidence_interval?.upper.toFixed(1)} kg/ha
                     </div>
                   </div>
                   <TrendingUp className="w-8 h-8 text-muted-foreground" />
@@ -121,3 +151,4 @@ export function PredictionHistory() {
     </div>
   )
 }
+
